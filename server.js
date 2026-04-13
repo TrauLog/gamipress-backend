@@ -12,7 +12,6 @@ app.get('/', (req, res) => {
 });
 
 app.post('/webhook', async (req, res) => {
-	await axios.post(...)
   console.log('POST /webhook recibido');
   console.log('Headers:', JSON.stringify(req.headers, null, 2));
 
@@ -26,12 +25,8 @@ app.post('/webhook', async (req, res) => {
     return res.status(200).send('');
   }
 
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  return res.sendStatus(200);
-});
-
   console.log('Evento recibido en /webhook');
-  console.log(JSON.stringify(req.body, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
 
   try {
     const call = req.body || {};
@@ -72,7 +67,7 @@ app.post('/webhook', async (req, res) => {
     console.error('Error procesando webhook:', error.message);
   }
 
-  res.sendStatus(200);
+  return res.sendStatus(200);
 });
 
 const PORT = process.env.PORT || 3000;
