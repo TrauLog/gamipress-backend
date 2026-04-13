@@ -12,15 +12,22 @@ app.get('/', (req, res) => {
 });
 
 app.post('/webhook', async (req, res) => {
+  console.log('POST /webhook recibido');
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+
   const validationToken =
     req.headers['validation-token'] ||
     req.headers['Validation-Token'];
 
   if (validationToken) {
-    console.log('Validation token recibido');
+    console.log('Validation token recibido:', validationToken);
     res.setHeader('Validation-Token', validationToken);
     return res.status(200).send('');
   }
+
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  return res.sendStatus(200);
+});
 
   console.log('Evento recibido en /webhook');
   console.log(JSON.stringify(req.body, null, 2));
