@@ -4,8 +4,8 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-const WORDPRESS_URL = 'https://tuweb.com';
-const API_KEY = 'TU_API_KEY';
+const WORDPRESS_URL = process.env.WORDPRESS_URL;
+const API_KEY = process.env.API_KEY;
 
 app.get('/', (req, res) => {
   res.send('Servidor activo');
@@ -17,11 +17,12 @@ app.post('/webhook', async (req, res) => {
     req.headers['Validation-Token'];
 
   if (validationToken) {
+    console.log('Validation token recibido');
     res.setHeader('Validation-Token', validationToken);
     return res.status(200).send('');
   }
 
-  console.log('Evento recibido:');
+  console.log('Evento recibido en /webhook');
   console.log(JSON.stringify(req.body, null, 2));
 
   try {
@@ -39,13 +40,13 @@ app.post('/webhook', async (req, res) => {
       reason = reason ? reason + ' + Inbound call' : 'Inbound call';
     }
 
-    if (points > 0) {
+    if (points > 0 && WORDPRESS_URL && API_KEY) {
       await axios.post(
         `${WORDPRESS_URL}/wp-json/gamipress/v1/award-points`,
         {
           user: '1',
-          points: points,
-          reason: reason
+          points,
+          reason
         },
         {
           headers: {
@@ -57,7 +58,7 @@ app.post('/webhook', async (req, res) => {
 
       console.log(`Puntos enviados: ${points}`);
     } else {
-      console.log('No se asignaron puntos');
+      console.log('No se asignaron puntos todavía');
     }
   } catch (error) {
     console.error('Error procesando webhook:', error.message);
