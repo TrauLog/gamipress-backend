@@ -12,6 +12,7 @@ app.get('/', (req, res) => {
 });
 
 app.post('/webhook', async (req, res) => {
+	await axios.post(...)
   console.log('POST /webhook recibido');
   console.log('Headers:', JSON.stringify(req.headers, null, 2));
 
