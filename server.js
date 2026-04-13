@@ -29,18 +29,22 @@ app.post('/webhook', async (req, res) => {
   console.log('Body:', JSON.stringify(req.body, null, 2));
 
   try {
-    const call = req.body || {};
+    const event = req.body || {};
+    const party = event.body?.parties?.[0];
+
     let points = 0;
     let reason = '';
 
-    if (call.duration && call.duration > 300) {
-      points += 10;
-      reason = 'Call > 5 min';
-    }
+    if (party) {
+      if (party.direction === 'Inbound') {
+        points += 5;
+        reason = 'Inbound call';
+      }
 
-    if (call.direction === 'Inbound') {
-      points += 5;
-      reason = reason ? reason + ' + Inbound call' : 'Inbound call';
+      if (party.status && party.status.code === 'Disconnected') {
+        points += 5;
+        reason = reason ? reason + ' + Completed call' : 'Completed call';
+      }
     }
 
     if (points > 0 && WORDPRESS_URL && API_KEY) {
