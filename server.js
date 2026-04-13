@@ -40,7 +40,6 @@ app.post('/webhook', async (req, res) => {
       const statusCode = party.status?.code || '';
       const duration = Number(party.duration || 0);
 
-      // 🟢 Básico
       if (direction === 'Inbound') {
         points += 5;
         reasons.push('Inbound call');
@@ -51,7 +50,6 @@ app.post('/webhook', async (req, res) => {
         reasons.push('Completed call');
       }
 
-      // 🟡 Intermedio
       if (duration > 120) {
         points += 10;
         reasons.push('Call > 2 min');
@@ -62,24 +60,22 @@ app.post('/webhook', async (req, res) => {
         reasons.push('Call > 5 min');
       }
 
-      // 🔵 Parcialmente posible
       if (party.missedCall === true || statusCode === 'Missed') {
         points -= 10;
         reasons.push('Missed call');
       }
-
-      // Fase 2:
-      // - cliente nuevo => requiere historial/CRM
-      // - cierre de venta => requiere CRM
-      // - responder rápido => requiere comparar timestamps entre eventos
-      // - no perder llamadas => requiere rollup por agente
     }
 
     const reason = reasons.join(' + ');
 
+    console.log('Points calculados:', points);
+    console.log('Reason:', reason);
+    console.log('WORDPRESS_URL existe:', !!WORDPRESS_URL);
+    console.log('BRIDGE_SECRET existe:', !!BRIDGE_SECRET);
+
     if (points !== 0 && WORDPRESS_URL && BRIDGE_SECRET) {
       const response = await axios.post(
-        `${WORDPRESS_URL}/wp-json/traulog/v1/award-call-points`,
+        `${WORDPRESS_URL}/index.php?rest_route=/traulog/v1/award-call-points`,
         {
           secret: BRIDGE_SECRET,
           user_id: 1,
@@ -95,7 +91,6 @@ app.post('/webhook', async (req, res) => {
       );
 
       console.log(`Puntos enviados: ${points}`);
-      console.log('Razón:', reason);
       console.log('Respuesta WP:', response.data);
     } else {
       console.log('No se asignaron puntos todavía');
