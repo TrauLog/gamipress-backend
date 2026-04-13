@@ -39,17 +39,26 @@ app.post('/webhook', async (req, res) => {
       const direction = party.direction || '';
       const statusCode = party.status?.code || '';
       const duration = Number(party.duration || 0);
+      const missedCall = party.missedCall === true;
 
-      if (direction === 'Inbound') {
+      console.log('Direction:', direction);
+      console.log('Status:', statusCode);
+      console.log('Duration:', duration);
+      console.log('MissedCall:', missedCall);
+
+      // ✅ Solo premiar llamadas entrantes realmente atendidas
+      if (direction === 'Inbound' && !missedCall && duration > 0) {
         points += 5;
-        reasons.push('Inbound call');
+        reasons.push('Inbound answered call');
       }
 
-      if (statusCode === 'Disconnected') {
+      // ✅ Extra por llamada completada con duración real
+      if (!missedCall && duration > 0) {
         points += 5;
         reasons.push('Completed call');
       }
 
+      // ✅ Bonus por duración
       if (duration > 120) {
         points += 10;
         reasons.push('Call > 2 min');
@@ -60,7 +69,8 @@ app.post('/webhook', async (req, res) => {
         reasons.push('Call > 5 min');
       }
 
-      if (party.missedCall === true || statusCode === 'Missed') {
+      // ✅ Penalización solo si realmente fue perdida
+      if (missedCall) {
         points -= 10;
         reasons.push('Missed call');
       }
