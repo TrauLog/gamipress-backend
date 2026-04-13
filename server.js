@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 
 const WORDPRESS_URL = process.env.WORDPRESS_URL;
-const API_KEY = process.env.API_KEY;
+const BRIDGE_SECRET = process.env.BRIDGE_SECRET;
 
 app.get('/', (req, res) => {
   res.send('Servidor activo');
@@ -47,28 +47,34 @@ app.post('/webhook', async (req, res) => {
       }
     }
 
-    if (points > 0 && WORDPRESS_URL && API_KEY) {
-      await axios.post(
-        `${WORDPRESS_URL}/wp-json/gamipress/v1/award-points`,
+    if (points > 0 && WORDPRESS_URL && BRIDGE_SECRET) {
+      const response = await axios.post(
+        `${WORDPRESS_URL}/wp-json/traulog/v1/award-call-points`,
         {
-          user: '1',
+          secret: BRIDGE_SECRET,
+          user_id: 1,
           points,
-          reason
+          reason,
+          session_id: party?.id || event.body?.sessionId || 'no-session'
         },
         {
           headers: {
-            Authorization: `Bearer ${API_KEY}`,
             'Content-Type': 'application/json'
           }
         }
       );
 
       console.log(`Puntos enviados: ${points}`);
+      console.log('Respuesta WP:', response.data);
     } else {
       console.log('No se asignaron puntos todavía');
     }
   } catch (error) {
     console.error('Error procesando webhook:', error.message);
+
+    if (error.response) {
+      console.error('Respuesta WP error:', error.response.data);
+    }
   }
 
   return res.sendStatus(200);
