@@ -46,19 +46,17 @@ app.post('/webhook', async (req, res) => {
       console.log('Duration:', duration);
       console.log('MissedCall:', missedCall);
 
-      // ✅ Solo premiar llamadas entrantes realmente atendidas
+      // Regla temporal de prueba
       if (direction === 'Inbound' && !missedCall && duration > 0) {
         points += 5;
         reasons.push('Inbound answered call');
       }
 
-      // ✅ Extra por llamada completada con duración real
       if (!missedCall && duration > 0) {
         points += 5;
         reasons.push('Completed call');
       }
 
-      // ✅ Bonus por duración
       if (duration > 120) {
         points += 10;
         reasons.push('Call > 2 min');
@@ -69,7 +67,6 @@ app.post('/webhook', async (req, res) => {
         reasons.push('Call > 5 min');
       }
 
-      // ✅ Penalización solo si realmente fue perdida
       if (missedCall) {
         points -= 10;
         reasons.push('Missed call');
