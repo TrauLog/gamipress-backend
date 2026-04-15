@@ -7,6 +7,19 @@ app.use(express.json());
 const WORDPRESS_URL = process.env.WORDPRESS_URL;
 const BRIDGE_SECRET = process.env.BRIDGE_SECRET;
 
+// Memoria temporal de sesiones
+const sessions = new Map();
+
+// Limpieza simple cada 10 minutos
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of sessions.entries()) {
+    if (now - value.updatedAt > 1000 * 60 * 60) {
+      sessions.delete(key);
+    }
+  }
+}, 1000 * 60 * 10);
+
 app.get('/', (req, res) => {
   res.send('Servidor activo');
 });
@@ -30,80 +43,114 @@ app.post('/webhook', async (req, res) => {
 
   try {
     const event = req.body || {};
-    const party = event.body?.parties?.[0];
+    const body = event.body || {};
+    const parties = Array.isArray(body.parties) ? body.parties : [];
+
+    if (!body.telephonySessionId || parties.length === 0) {
+      console.log('No hay telephonySessionId o parties; no se procesa.');
+      return res.sendStatus(200);
+    }
+
+    const telephonySessionId = body.telephonySessionId;
+
+    // Tomamos la primera party, pero también la logueamos completa
+    const party = parties[0];
+    const direction = party.direction || '';
+    const statusCode = party.status?.code || '';
+    const missedCall = party.missedCall === true;
+    const partyId = party.id || 'no-party-id';
+
+    console.log('telephonySessionId:', telephonySessionId);
+    console.log('partyId:', partyId);
+    console.log('Direction:', direction);
+    console.log('Status:', statusCode);
+    console.log('MissedCall:', missedCall);
+
+    // Recuperar o crear sesión
+    const current = sessions.get(telephonySessionId) || {
+      telephonySessionId,
+      direction: '',
+      answered: false,
+      missedCall: false,
+      completed: false,
+      pointsSent: false,
+      updatedAt: Date.now()
+    };
+
+    // Guardar datos acumulados
+    if (direction) current.direction = direction;
+    if (missedCall) current.missedCall = true;
+    current.updatedAt = Date.now();
+
+    // Estados que interpretamos como "contestada/conectada"
+    const answeredStates = ['Answered', 'Connected'];
+    if (answeredStates.includes(statusCode)) {
+      current.answered = true;
+    }
+
+    // Estado final
+    if (statusCode === 'Disconnected') {
+      current.completed = true;
+    }
+
+    sessions.set(telephonySessionId, current);
+
+    console.log('Session state acumulado:', JSON.stringify(current, null, 2));
 
     let points = 0;
     const reasons = [];
 
-    if (party) {
-      const direction = party.direction || '';
-      const statusCode = party.status?.code || '';
-      const duration = Number(party.duration || 0);
-      const missedCall = party.missedCall === true;
-
-      console.log('Direction:', direction);
-      console.log('Status:', statusCode);
-      console.log('Duration:', duration);
-      console.log('MissedCall:', missedCall);
-
-      // ✅ Solo premiar llamadas entrantes realmente atendidas
-      if (direction === 'Inbound' && !missedCall && duration > 0) {
-        points += 5;
-        reasons.push('Inbound answered call');
+    // Solo procesar una vez cuando la llamada termina
+    if (current.completed && !current.pointsSent) {
+      // Penalización por llamada perdida entrante
+      if (current.direction === 'Inbound' && current.missedCall) {
+        points = -10;
+        reasons.push('Missed inbound call');
       }
 
-      // ✅ Extra por llamada completada con duración real
-      if (!missedCall && duration > 0) {
+      // Premio por llamada entrante realmente atendida
+      if (current.direction === 'Inbound' && !current.missedCall && current.answered) {
+        points += 5;
+        reasons.push('Inbound answered call');
+
         points += 5;
         reasons.push('Completed call');
       }
 
-      // ✅ Bonus por duración
-      if (duration > 120) {
-        points += 10;
-        reasons.push('Call > 2 min');
-      }
+      const reason = reasons.join(' + ');
 
-      if (duration > 300) {
-        points += 15;
-        reasons.push('Call > 5 min');
-      }
+      console.log('Points calculados:', points);
+      console.log('Reason:', reason);
+      console.log('WORDPRESS_URL existe:', !!WORDPRESS_URL);
+      console.log('BRIDGE_SECRET existe:', !!BRIDGE_SECRET);
 
-      // ✅ Penalización solo si realmente fue perdida
-      if (missedCall) {
-        points -= 10;
-        reasons.push('Missed call');
-      }
-    }
-
-    const reason = reasons.join(' + ');
-
-    console.log('Points calculados:', points);
-    console.log('Reason:', reason);
-    console.log('WORDPRESS_URL existe:', !!WORDPRESS_URL);
-    console.log('BRIDGE_SECRET existe:', !!BRIDGE_SECRET);
-
-    if (points !== 0 && WORDPRESS_URL && BRIDGE_SECRET) {
-      const response = await axios.post(
-        `${WORDPRESS_URL}/index.php?rest_route=/traulog/v1/award-call-points`,
-        {
-          secret: BRIDGE_SECRET,
-          user_id: 1,
-          points,
-          reason,
-          session_id: party?.id || event.body?.sessionId || 'no-session'
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json'
+      if (points !== 0 && WORDPRESS_URL && BRIDGE_SECRET) {
+        const response = await axios.post(
+          `${WORDPRESS_URL}/index.php?rest_route=/traulog/v1/award-call-points`,
+          {
+            secret: BRIDGE_SECRET,
+            user_id: 1,
+            points,
+            reason,
+            session_id: telephonySessionId
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json'
+            }
           }
-        }
-      );
+        );
 
-      console.log(`Puntos enviados: ${points}`);
-      console.log('Respuesta WP:', response.data);
+        current.pointsSent = true;
+        sessions.set(telephonySessionId, current);
+
+        console.log(`Puntos enviados: ${points}`);
+        console.log('Respuesta WP:', response.data);
+      } else {
+        console.log('No se asignaron puntos todavía');
+      }
     } else {
-      console.log('No se asignaron puntos todavía');
+      console.log('Evento intermedio recibido; esperando estado final o evitando duplicado.');
     }
   } catch (error) {
     console.error('Error procesando webhook:', error.message);
