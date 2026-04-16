@@ -53,7 +53,7 @@ app.post('/webhook', async (req, res) => {
 
     const telephonySessionId = body.telephonySessionId;
 
-    // Tomar la party del agente/extensión, si existe
+    // Buscar la party del agente/extensión
     const agentParty = parties.find((p) => p.extensionId) || parties[0];
 
     const direction = agentParty.direction || '';
@@ -63,7 +63,7 @@ app.post('/webhook', async (req, res) => {
     const extensionNumber = String(agentParty.extensionNumber || '');
     const partyId = agentParty.id || 'no-party-id';
 
-    // Datos de perfil
+    // Datos del agente
     const name =
       agentParty.extension?.name ||
       agentParty.from?.name ||
@@ -136,15 +136,20 @@ app.post('/webhook', async (req, res) => {
     let points = 0;
     const reasons = [];
 
-    // Solo procesar una vez cuando la llamada termina
+    // Solo procesar una vez al finalizar la llamada
     if (current.completed && !current.pointsSent) {
-      // Penalización por llamada perdida entrante
+      // Ignorar TODO outbound
+      if (current.direction === 'Outbound') {
+        points = 0;
+      }
+
+      // Penalizar solo missed inbound
       if (current.direction === 'Inbound' && current.missedCall) {
-        points = -10;
+        points -= 10;
         reasons.push('Missed inbound call');
       }
 
-      // Premio por llamada entrante realmente atendida
+      // Premiar solo inbound contestada
       if (current.direction === 'Inbound' && !current.missedCall && current.answered) {
         points += 5;
         reasons.push('Inbound answered call');
