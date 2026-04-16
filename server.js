@@ -53,22 +53,53 @@ app.post('/webhook', async (req, res) => {
 
     const telephonySessionId = body.telephonySessionId;
 
-    // Tomamos la primera party, pero también la logueamos completa
-    const party = parties[0];
-    const direction = party.direction || '';
-    const statusCode = party.status?.code || '';
-    const missedCall = party.missedCall === true;
-    const partyId = party.id || 'no-party-id';
+    // Tomar la party del agente/extensión, si existe
+    const agentParty = parties.find((p) => p.extensionId) || parties[0];
+
+    const direction = agentParty.direction || '';
+    const statusCode = agentParty.status?.code || '';
+    const missedCall = agentParty.missedCall === true;
+    const extensionId = String(agentParty.extensionId || '');
+    const extensionNumber = String(agentParty.extensionNumber || '');
+    const partyId = agentParty.id || 'no-party-id';
+
+    // Datos de perfil
+    const name =
+      agentParty.extension?.name ||
+      agentParty.from?.name ||
+      agentParty.to?.name ||
+      '';
+
+    const email =
+      agentParty.extension?.contact?.email ||
+      agentParty.contact?.email ||
+      '';
+
+    const phone =
+      agentParty.from?.phoneNumber ||
+      agentParty.to?.phoneNumber ||
+      agentParty.phoneNumber ||
+      '';
 
     console.log('telephonySessionId:', telephonySessionId);
     console.log('partyId:', partyId);
+    console.log('extensionId:', extensionId);
+    console.log('extensionNumber:', extensionNumber);
+    console.log('name:', name);
+    console.log('email:', email);
+    console.log('phone:', phone);
     console.log('Direction:', direction);
     console.log('Status:', statusCode);
     console.log('MissedCall:', missedCall);
 
-    // Recuperar o crear sesión
+    // Recuperar o crear sesión acumulada
     const current = sessions.get(telephonySessionId) || {
       telephonySessionId,
+      extensionId: '',
+      extensionNumber: '',
+      name: '',
+      email: '',
+      phone: '',
       direction: '',
       answered: false,
       missedCall: false,
@@ -77,12 +108,17 @@ app.post('/webhook', async (req, res) => {
       updatedAt: Date.now()
     };
 
-    // Guardar datos acumulados
+    // Acumular datos
+    if (extensionId) current.extensionId = extensionId;
+    if (extensionNumber) current.extensionNumber = extensionNumber;
+    if (name) current.name = name;
+    if (email) current.email = email;
+    if (phone) current.phone = phone;
     if (direction) current.direction = direction;
     if (missedCall) current.missedCall = true;
     current.updatedAt = Date.now();
 
-    // Estados que interpretamos como "contestada/conectada"
+    // Estados que interpretamos como llamada contestada
     const answeredStates = ['Answered', 'Connected'];
     if (answeredStates.includes(statusCode)) {
       current.answered = true;
@@ -124,12 +160,21 @@ app.post('/webhook', async (req, res) => {
       console.log('WORDPRESS_URL existe:', !!WORDPRESS_URL);
       console.log('BRIDGE_SECRET existe:', !!BRIDGE_SECRET);
 
-      if (points !== 0 && WORDPRESS_URL && BRIDGE_SECRET) {
+      if (
+        points !== 0 &&
+        WORDPRESS_URL &&
+        BRIDGE_SECRET &&
+        current.extensionId
+      ) {
         const response = await axios.post(
           `${WORDPRESS_URL}/index.php?rest_route=/traulog/v1/award-call-points`,
           {
             secret: BRIDGE_SECRET,
-            user_id: 1,
+            extension_id: current.extensionId,
+            extension_number: current.extensionNumber,
+            name: current.name,
+            email: current.email,
+            phone: current.phone,
             points,
             reason,
             session_id: telephonySessionId
